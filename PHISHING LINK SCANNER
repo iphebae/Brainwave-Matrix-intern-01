@@ -1,0 +1,80 @@
+# Brainwave-Matrix-intern-01
+phishing link scanner: This tool checks if a given URL is a phishing link
+import re
+import requests
+import socket
+import ssl
+from datetime import datetime
+def is_suspicious_url(url):
+    phishing_keywords = ["login", "verify", "secure", "update", "account", "bank", "free", "gift", "win"]
+    if any(keyword in url.lower() for keyword in phishing_keywords):
+        return True
+    return False
+
+def check_url_blacklist(url):
+    blacklist = ["malicious-site.com", "phishingsite.net", "fakebank.com"]  # Example list
+    for site in blacklist:
+        if site in url:
+            return True
+    return False
+
+def validate_url(url):
+    pattern = re.compile(r"https?://[a-zA-Z0-9./-]+")
+    return re.match(pattern, url)
+
+def check_ssl_certificate(url):
+    try:
+        hostname = url.split("//")[-1].split("/")[0]
+        context = ssl.create_default_context()
+        with socket.create_connection((hostname, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert()
+                expiration_date = datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z")
+                if expiration_date < datetime.utcnow():
+                    return "SSL Certificate is expired! ❌"
+    except Exception:
+        return "No valid SSL certificate found! ⚠️"
+    return "SSL Certificate is valid ✅"
+
+def get_domain_info(url):
+    try:
+        domain = url.split("//")[-1].split("/")[0]
+        domain_info = (domain)
+        if isinstance(domain_info.creation_date, list):
+            creation_date = domain_info.creation_date[0]
+        else:
+            creation_date = domain_info.creation_date
+        age = (datetime.utcnow() - creation_date).days
+        if age < 30:
+            return "Domain is very new, could be suspicious! 🚨"
+    except Exception:
+        return "Could not retrieve WHOIS information. ⚠️"
+    return "Domain age looks normal ✅"
+
+def scan_url(url):
+    if not validate_url(url):
+        return "Invalid URL format."
+    
+    if is_suspicious_url(url):
+        return "Warning: URL contains suspicious keywords. 🚨"
+    
+    if check_url_blacklist(url):
+        return "Danger! This URL is blacklisted. ❌"
+    
+    ssl_check = check_ssl_certificate(url)
+    domain_info = get_domain_info(url)
+    
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return "This site might be down or suspicious. ⚠️"
+    except requests.RequestException:
+        return "Could not reach the site. It may be unsafe. 🚨"
+    
+    return f"URL seems safe ✅\n{ssl_check}\n{domain_info}"
+
+# Example Usage
+if __name__ == "__main__":
+    user_url = input("Enter the URL to scan: ")
+    result = scan_url(user_url)
+    print(result)
